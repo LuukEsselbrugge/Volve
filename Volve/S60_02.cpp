@@ -205,18 +205,18 @@ class S60_02 : public Profile {
      if(id == SWM){
       int mediacontrols = data[7];
       int cruisecontrols = data[5];
-      //Frame to spoof radio into no buttons pressed
-      //Note: also spoofs cruise buttons, possible side effect
-      uint8_t radio_overwrite[] = {0x00,0x00,0x00,0x05,0x1F,0x40,0x40,0x7F};
+      //Frame to tell radio phone is on spoof radio into no buttons pressed
+      uint8_t radio_overwrite[] = {0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0b000001};
+      uint8_t radio_normal[] = {0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0b000000};
       //Back pressed
       if(mediacontrols == 0x7E && mediapressed == 0){
-        can_tx(SWM, radio_overwrite);
+        can_tx(0x0220200E, radio_overwrite);
         this->printBT("notify-PREVIOUS_SONG");
         mediapressed = 1;
       }
       //Forward pressed
-      if(mediacontrols == 0x7E && mediapressed == 0){
-        can_tx(SWM, radio_overwrite);
+      if(mediacontrols == 0x7D && mediapressed == 0){
+        can_tx(0x0220200E, radio_overwrite);
         this->printBT("notify-SKIP_SONG");
         mediapressed = 1;
       }
@@ -248,6 +248,7 @@ class S60_02 : public Profile {
       Serial.println(value);
       char copy[31];
       value.toCharArray(copy, 31);
+      this->enablelcd();
       this->lcd(copy,31);
       return "OK";
     }
