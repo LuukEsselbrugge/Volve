@@ -17,6 +17,8 @@ class Profile {
      virtual String print(String value) {}
 
      virtual void can_rx(int id, uint8_t* data) {}
+
+     virtual void setupDone() {}
      
      ~Profile() = default;
 };

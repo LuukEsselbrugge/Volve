@@ -49,6 +49,8 @@ void setup() {
   CAN_cfg.rx_queue = xQueueCreate(rx_queue_size, sizeof(CAN_frame_t));
   // Init CAN Module
   ESP32Can.CANInit();
+
+  profiles[0]->setupDone();
 }
 
 void loop(){

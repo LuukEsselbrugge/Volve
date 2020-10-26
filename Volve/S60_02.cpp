@@ -6,10 +6,14 @@ class S60_02 : public Profile {
   const String availableData = "MILEAGE,BATTERY_VOLTAGE,FUEL_LEVEL,CABIN_TEMP";
   const String availableSettings = "LAZYINDICATOR,UNLOCK_LIGHT";
 
-  private: int BATTERY_VOLTAGE = 12;
-  private: int MILEAGE = 130000;
-  private: int FUEL_LEVEL = 30;
-  private: int CABIN_TEMP = 21;
+  private: int BATTERY_VOLTAGE = 0;
+  private: int MILEAGE = 0;
+  private: int FUEL_LEVEL = 0;
+  private: int CABIN_TEMP = 0;
+  private: int SPEED = 0;
+  private: int RPM = 0;
+
+  private: int mediapressed = 0;
 
   //byte 7 diag1 commands
   const int WINDOW_REAR_R_OPEN = 0b00000001;
@@ -30,6 +34,11 @@ class S60_02 : public Profile {
   const int WINDOW_R_CLOSE = 0b00001000;
   const int WINDOW_R_OPEN = 0b00010000;
 
+  //Adresses modules
+  const int SWM = 0x00400066;
+  const int CCM = 0x04000002;
+  const int DIAG = 0x0FFFFE;
+
   private:
       void (*can_tx)(int id, uint8_t d[8]);
       void (*printBT)(String s);
@@ -38,7 +47,7 @@ class S60_02 : public Profile {
         //Enables lcd but also disabled media buttons needs to be done once
         uint8_t d[] = {0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0b00000101};
         can_tx(0x0220200E, d);
-        //LCD stays on but media buttons work again
+        //LCD stays on but media buttons work again magic
         uint8_t d2[] = {0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0b00000000};
         can_tx(0x0220200E, d2);
       }
@@ -56,12 +65,9 @@ class S60_02 : public Profile {
       }
       
       void lcd(char input[], int len){
-        
         char str[34] = {0};
         std::fill_n(str, 34, 0x20);
         memcpy(str, input, len);
-      
-        
         int block = 0;
         for(int i = 0; i < 32; i+=6)
          {
@@ -128,7 +134,7 @@ class S60_02 : public Profile {
       this->printBT = e;
 
       //this->enablelcd();
-//      th/is->lcd("CANe~V1         luuk.cc",23);
+//      this->lcd("CANe~V1         luuk.cc",23);
     }
     String getCommands() {
       return availableCommands;
@@ -195,10 +201,59 @@ class S60_02 : public Profile {
       printf(",%lu",millis());
       printf("\n");     
      }
+
+     if(id == SWM){
+      int mediacontrols = data[7];
+      int cruisecontrols = data[5];
+      //Frame to spoof radio into no buttons pressed
+      //Note: also spoofs cruise buttons, possible side effect
+      uint8_t radio_overwrite[] = {0x00,0x00,0x00,0x05,0x1F,0x40,0x40,0x7F};
+      //Back pressed
+      if(mediacontrols == 0x7E && mediapressed == 0){
+        can_tx(SWM, radio_overwrite);
+        this->printBT("notify-PREVIOUS_SONG");
+        mediapressed = 1;
+      }
+      //Forward pressed
+      if(mediacontrols == 0x7E && mediapressed == 0){
+        can_tx(SWM, radio_overwrite);
+        this->printBT("notify-SKIP_SONG");
+        mediapressed = 1;
+      }
+      //All media buttons released
+      if(mediacontrols == 0x7F){
+        mediapressed = 0;
+      }
+     }
+
+     if(id == CCM){
+      CABIN_TEMP = data[7] / 0.04;
+     }
+
+     if(id == 0x01213FFC){
+      int A = data[6];
+      A &= 0b11;
+      SPEED = (A << 8 | data[7]) / 4;
+     }
+
+     if(id == 0x02C13428){
+      int A = data[6];
+      A &= 0b1111;
+      RPM = A << 8 | data[7];
+     }
+     
     }
 
     String print(String value) {
       Serial.println(value);
+      char copy[31];
+      value.toCharArray(copy, 31);
+      this->lcd(copy,31);
       return "OK";
+    }
+
+    void setupDone(){
+      this->enablelcd();
+      this->lcd("Volve~V1        luuk.cc",23);
     }
 };
