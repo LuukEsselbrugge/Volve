@@ -1,11 +1,20 @@
 #include <ESP32CAN.h>
 #include <CAN_config.h>
+#include <HardwareSerial.h>
 #include "Classes.cpp"
 #include "S60_02.cpp"
 #include "BluetoothSerial.h"
 
+HardwareSerial RTI(2);
+
 CAN_device_t CAN_cfg;
 const int rx_queue_size = 50;
+
+//Volvo RTI Display;
+const char brightness_levels[] = {0x20, 0x61, 0x62, 0x23, 0x64, 0x25, 0x26, 0x67, 0x68, 0x29, 0x2A, 0x2C, 0x6B, 0x6D, 0x6E, 0x2F};
+
+int current_display_mode = 0x4C;
+char current_brightness_level = 15;
 
 BluetoothSerial SerialBT;
 
@@ -32,13 +41,14 @@ void can_tx(int id, uint8_t d[8]){
 }
 
 Profile *profiles[] = {
-   new S60_02(&can_tx, printBT)
+   new S60_02(&can_tx, &printAll, &updateDisplay)
 };
 int PROFILE_COUNT = 1;
 int currentProfile = 0;
 
 void setup() {
   Serial.begin(115200);
+  RTI.begin(2400);
   SerialBT.enableSSP();
   SerialBT.begin("Volve");
   SerialBT.setTimeout(100);
@@ -51,19 +61,19 @@ void setup() {
   ESP32Can.CANInit();
 
   profiles[0]->setupDone();
+
+  current_display_mode = 0x46;
+  //Turn on the PI
+  pinMode(GPIO_NUM_23, OUTPUT);
+  digitalWrite(GPIO_NUM_23,HIGH);
+
 }
 
 void loop(){
-  if (Serial.available()) {
-    char test = Serial.read();
-    if(test == '@'){
-    SerialBT.println("notify-SKIP_SONG");
-    }
-    if(test == '!'){
-    SerialBT.println("notify-PREVIOUS_SONG");
-    }
-  }
   String command;
+  if (Serial.available()) {
+    command = Serial.readString();
+  }
   if (SerialBT.available()) {
     command = SerialBT.readString();
   }
@@ -71,51 +81,111 @@ void loop(){
   if(currentProfile == -1){
     if(command.startsWith("getProfiles")){
        for(int x = 0; x < PROFILE_COUNT; x++){
-         SerialBT.print("getProfiles-"+profiles[x]->getName()+'\n');
+         printAll("getProfiles-"+profiles[x]->getName()+'\n');
        }
      }else{
         if(command.startsWith("profile")){
           currentProfile = command.substring(8,9).toInt();
-          SerialBT.print("profile-OK"+'\n');
+          printAll("profile-OK"+'\n');
         }else{
           if(command != 0){
-            SerialBT.print("NO_PROFILE"+'\n');
+            printAll("NO_PROFILE"+'\n');
           }
         }
      }
   }
   else{
    if(command.startsWith("getCommands"))
-      SerialBT.print("getCommands-"+profiles[0]->getCommands()+'\n');
+      printAll("getCommands-"+profiles[0]->getCommands()+'\n');
       
    if(command.startsWith("getSettings"))
-      SerialBT.print("getSettings-"+profiles[0]->getSettings()+'\n');
+      printAll("getSettings-"+profiles[0]->getSettings()+'\n');
 
    if(command.startsWith("getData"))
-      SerialBT.print("getData-"+profiles[0]->getData()+'\n');
+      printAll("getData-"+profiles[0]->getData()+'\n');
       
    if(command.startsWith("command"))
-      SerialBT.print("command-"+profiles[0]->command(command.substring(command.indexOf(' ')+1,command.indexOf('\n')))+'\n');
+      printAll("command-"+profiles[0]->command(command.substring(command.indexOf(' ')+1,command.indexOf('\n')))+'\n');
 
    if(command.startsWith("data"))
-      SerialBT.print("data-"+profiles[0]->data(command.substring(command.indexOf(' ')+1,command.indexOf('\n')))+'\n');
+      printAll("data-"+profiles[0]->data(command.substring(command.indexOf(' ')+1,command.indexOf('\n')))+'\n');
 
    if(command.startsWith("print"))
-      SerialBT.print("print-"+profiles[0]->print(command.substring(command.indexOf(' ')+1,command.indexOf('\n')))+'\n');
+      printAll("print-"+profiles[0]->print(command.substring(command.indexOf(' ')+1,command.indexOf('\n')))+'\n');
+   
+   if(command.startsWith("PI_ON")){
+      digitalWrite(GPIO_NUM_23, HIGH);
+      printAll("PI_ON");
+   }
+   if(command.startsWith("PI_OFF")){
+      digitalWrite(GPIO_NUM_23, LOW);
+      printAll("PI_OFF");
+   }
   }
-can_RX();
+  can_RX();
+
+ //Send data to RTI Volvo Display
+
+ rtiWrite();
+ 
 }
 
+float lastCanRX = millis();
 void can_RX(){
   CAN_frame_t rx_frame;
   // Receive next CAN frame from queue
   if (xQueueReceive(CAN_cfg.rx_queue, &rx_frame, 3 * portTICK_PERIOD_MS) == pdTRUE) {
     profiles[0]->can_rx(rx_frame.MsgID, rx_frame.data.u8);
+    lastCanRX = millis();
   }
+  
+ //Go into deep sleep if no CAN frame recieved for 1 minute
+ //Also turns off PI
+ //lastCanRX = millis();
+ if ((millis()-lastCanRX) > 60000){
+    //Lower display
+    current_display_mode = 0x46;
+    //Notify the Raspberry PI we are going into deep sleep
+    printAll("EVENT_SHUTDOWN\n");
+    //Wait for PI to shutdown
+    delay(30000);
+    //Disable PI power
+    digitalWrite(GPIO_NUM_23, LOW);
+    //Sleep tight esp
+    esp_sleep_enable_ext0_wakeup(GPIO_NUM_4,0);
+    esp_deep_sleep_start();
+ }
 }
 
-void printBT(String s){
-  SerialBT.println(s);
+void printAll(String s){
+  SerialBT.print(s);
+  Serial.print(s);
+}
+
+void updateDisplay(int m, int b){
+  if(m != 0){
+    current_display_mode = m;
+  }
+  current_brightness_level = b;
+}
+
+float lastRtiMsg = millis();
+int part = 0;
+void rtiWrite() {
+   if ((millis()-lastRtiMsg) > 200){
+    if(part==0){
+     RTI.write(current_display_mode);
+    }
+    if(part==1){
+     RTI.write(brightness_levels[current_brightness_level]);
+    }
+    if(part==2){ 
+     RTI.write(0x83);
+     part=-1;
+    }
+     part++;
+     lastRtiMsg = millis();
+   }
 }
 
 void firstBoot(){
