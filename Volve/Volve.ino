@@ -5,6 +5,11 @@
 #include "S60_02.cpp"
 #include "BluetoothSerial.h"
 
+#include "soc/soc.h"
+#include "soc/rtc_cntl_reg.h"
+
+#include "driver/periph_ctrl.h"
+
 HardwareSerial RTI(2);
 
 CAN_device_t CAN_cfg;
@@ -16,7 +21,7 @@ const char brightness_levels[] = {0x20, 0x61, 0x62, 0x23, 0x64, 0x25, 0x26, 0x67
 int current_display_mode = 0x4C;
 char current_brightness_level = 15;
 
-BluetoothSerial SerialBT;
+//BluetoothSerial SerialBT;
 
 void can_tx(int id, uint8_t d[8]){
    CAN_frame_t tx_frame;
@@ -47,11 +52,20 @@ int PROFILE_COUNT = 1;
 int currentProfile = 0;
 
 void setup() {
+  if(esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_EXT0){
+    esp_sleep_enable_timer_wakeup(100);
+    esp_deep_sleep_start();
+  }
+  //Disable brownout detection because PI boot draw randomly crashes the ESP32
+  WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0);
+  pinMode(GPIO_NUM_2, OUTPUT);
+  digitalWrite(GPIO_NUM_2,HIGH);
+  delay(2000);
   Serial.begin(115200);
   RTI.begin(2400);
-  SerialBT.enableSSP();
-  SerialBT.begin("Volve");
-  SerialBT.setTimeout(100);
+  //SerialBT.enableSSP();
+  //SerialBT.begin("Volve");
+  //SerialBT.setTimeout(100);
 
   CAN_cfg.speed = CAN_SPEED_125KBPS;
   CAN_cfg.tx_pin_id = GPIO_NUM_5;
@@ -67,6 +81,11 @@ void setup() {
   pinMode(GPIO_NUM_23, OUTPUT);
   digitalWrite(GPIO_NUM_23,HIGH);
 
+  //Gpio for video switch
+  pinMode(GPIO_NUM_27, OUTPUT);
+
+  
+
 }
 
 void loop(){
@@ -74,9 +93,9 @@ void loop(){
   if (Serial.available()) {
     command = Serial.readString();
   }
-  if (SerialBT.available()) {
-    command = SerialBT.readString();
-  }
+  //if (SerialBT.available()) {
+   // command = SerialBT.readString();
+  //}
 
   if(currentProfile == -1){
     if(command.startsWith("getProfiles")){
@@ -142,7 +161,7 @@ void can_RX(){
  //Go into deep sleep if no CAN frame recieved for 1 minute
  //Also turns off PI
  //lastCanRX = millis();
- if ((millis()-lastCanRX) > 60000){
+ if ((millis()-lastCanRX) > 30000){
     //Lower display
     current_display_mode = 0x46;
     //Notify the Raspberry PI we are going into deep sleep
@@ -158,7 +177,7 @@ void can_RX(){
 }
 
 void printAll(String s){
-  SerialBT.print(s);
+  //SerialBT.print(s);
   Serial.print(s);
 }
 

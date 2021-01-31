@@ -15,6 +15,9 @@ class S60_02 : public Profile {
   private: int SPEED = 0;
   private: int RPM = 0;
   private: int BRIGHTNESS = 0;
+  private: int REVERSE = 0;
+
+  private: int keep_display_up = 0;
 
   private: int mediapressed = 0;
   private: int controlmedia = 0;
@@ -212,11 +215,17 @@ class S60_02 : public Profile {
       }
 
       if(key=="DISPLAY_UP"){
-        this->updateDisplay(0x4C,15);
+        this->updateDisplay(0x45,15);
+        keep_display_up = 1;
+        //Switch video output to PI
+        digitalWrite(GPIO_NUM_27,HIGH);
         return "OK";
       }
       if(key=="DISPLAY_DOWN"){
         this->updateDisplay(0x46,15);
+        //Switch video output to Reverse cam
+        digitalWrite(GPIO_NUM_27,LOW);
+        keep_display_up = 0;
         return "OK";
       }
       return "NOT_FOUND";
@@ -346,11 +355,13 @@ class S60_02 : public Profile {
 
       //Vol up and cruise up pressed raise screen
       if(mediacontrols == 0x77 && cruisecontrols == 0x42){
-         this->updateDisplay(0x4C,15);
+         this->updateDisplay(0x45,15);
+         keep_display_up = 1;
       }
       //Vol down and cruise down pressed raise screen
       if(mediacontrols == 0x7B && cruisecontrols == 0x44){
          this->updateDisplay(0x46,15);
+         keep_display_up = 0;
       }
       
       //Volume up and skip pressed same time
@@ -419,6 +430,21 @@ class S60_02 : public Profile {
       int A = data[6];
       A &= 0b11;
       SPEED = (A << 8 | data[7]) / 4;
+      REVERSE = (data[2] >> 5) & 1;
+      //Serial.println(REVERSE);
+      if(REVERSE){
+        this->updateDisplay(0x45,15);
+        //Force video output to reverse cam
+        digitalWrite(GPIO_NUM_27,LOW);
+      }else{
+        //Make sure display was not enabled by someone else
+        if(!keep_display_up){
+          this->updateDisplay(0x46,15);
+        }else{
+          //Switch back to Raspberry PI
+          digitalWrite(GPIO_NUM_27,HIGH);
+        }
+      }
      }
 
      if(id == 0x02C13428){
@@ -439,7 +465,7 @@ class S60_02 : public Profile {
     }
 
     void setupDone(){
-      this->enablelcd();
-      this->lcd("Volve~V1        luuk.cc",23);
+      //this->enablelcd();
+      //this->lcd("Volve~V1        luuk.cc",23);
     }
 };
