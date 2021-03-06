@@ -73,9 +73,7 @@ void setup() {
   CAN_cfg.rx_queue = xQueueCreate(rx_queue_size, sizeof(CAN_frame_t));
   // Init CAN Module
   ESP32Can.CANInit();
-
-  profiles[0]->setupDone();
-
+  
   current_display_mode = 0x46;
   //Turn on the PI
   pinMode(GPIO_NUM_23, OUTPUT);
@@ -85,7 +83,10 @@ void setup() {
   pinMode(GPIO_NUM_27, OUTPUT);
 
   
-
+//  uint8_t d[] = {0xCE, 0x/51, 0xB0, 0x0B, 0x01, 0xFF, 0x20, 0x00};
+//  can_tx(0x0FFFFE, d);/
+  
+  profiles[0]->setupDone();
 }
 
 void loop(){

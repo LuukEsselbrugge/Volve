@@ -16,6 +16,7 @@ class S60_02 : public Profile {
   private: int RPM = 0;
   private: int BRIGHTNESS = 0;
   private: int REVERSE = 0;
+  private: int REVERSE_TIMEOUT = 0;
 
   private: int keep_display_up = 0;
 
@@ -136,6 +137,31 @@ class S60_02 : public Profile {
         uint8_t d[] = {0xCB, 0x51, 0xB2, 0x02, 0x00, 0x00, 0x00, 0x00};
         can_tx(0x0FFFFE, d);
       }
+
+      void gong_on(){
+        uint8_t d[] = {0xCE, 0x51, 0xB0, 0x0B, 0x01, 0xFF, 0x20, 0x00};
+        can_tx(0x0FFFFE, d);
+      }
+
+      void gong_off(){
+        uint8_t d[] = {0xCE, 0x51, 0xB0, 0x0B, 0x00, 0x00, 0x00, 0x00};
+        can_tx(0x0FFFFE, d);
+      }
+
+      void indicate_left(){
+        uint8_t d[] = {0xCE, 0x48, 0xB0, 0x05, 0x01, 0x03, 0x02, 0x00};
+        can_tx(0x0FFFFE, d);
+      }
+
+      void indicate_right(){
+        uint8_t d[] = {0xCE, 0x48, 0xB0, 0x05, 0x01, 0x03, 0x01, 0x00};
+        can_tx(0x0FFFFE, d);
+      }
+
+      void indicate_stop(){
+        uint8_t d[] = {0xCE, 0x48, 0xB0, 0x05, 0x00, 0x00, 0x00, 0x00};
+        can_tx(0x0FFFFE, d);
+      }
       
       void disablelcd(){
         uint8_t d[] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0b000100};
@@ -148,10 +174,9 @@ class S60_02 : public Profile {
       this->can_tx = f;
       this->printBT = e;
       this->updateDisplay = d;
-
-      //this->enablelcd();
-//      this->lcd("CANe~V1         luuk.cc",23);
+      
     }
+    
     String getCommands() {
       return availableCommands;
     }
@@ -223,8 +248,6 @@ class S60_02 : public Profile {
       }
       if(key=="DISPLAY_DOWN"){
         this->updateDisplay(0x46,15);
-        //Switch video output to Reverse cam
-        digitalWrite(GPIO_NUM_27,LOW);
         keep_display_up = 0;
         return "OK";
       }
@@ -255,13 +278,16 @@ class S60_02 : public Profile {
 
     //CAN data input
     void can_rx(int id, uint8_t* data){
-     // if(id == 0x000FFFFE && data[2] == 0xB0){
-//      printf("0x%08X",id);
-//      for (int i = 0; i < 8; i++) { 
-//        printf(",0x%02X", data[i]);
-//      }
-//      printf(",%lu",millis());
-//      printf("\n");     
+     // if(id == SWM_2 ){
+        // printf(",0x%02X", data[7]);
+       //  printf("\n");
+        //printf("0x%08X",id);
+//        for (int i = 0; i < 8; i++) { 
+//          printf(",0x%02X", data[i]);
+//        }
+       // printf(",%lu",millis());
+        //printf("\n");  
+    //  }   
 
      //Diag request responds
      if(id == 0x00800003){
@@ -282,29 +308,29 @@ class S60_02 : public Profile {
 
      if(id == SWM_2){
       //Transmit left indicator on for x amount
-      if(lazylefttime > millis()){
-        //uint8_t d[] = {0xC0,data[1],data[2],data[3],0x88,data[5],data[6],data[7]};
-        //can_tx(0x0FFFFE, d);
+      if(lazylefttime > millis() ){
+        //indicate_stop();
+        lazylefttime = 0;
       }
       //Transmit right indicator on for x amount
       if(lazyrighttime > millis()){
-        //uint8_t d[] = {data[0],data[1],data[2],data[3],0x94,data[5],data[6],data[7]};
-        //can_tx(0x0FFFFE, d);
-      }
-     //printf("0x%08X",data[4] & 0xF);
-      //printf("\n");
-      //Indicator left pressed
-      if((data[4] & 0xF) == 0x8 && lazylefttime < millis()){
-        lazylefttime = millis() + 3000;
-        //reset other indicator to prevent interference
+        //indicate_stop();
         lazyrighttime = 0;
+      }
+ 
+      //Indicator left pressed
+      if((data[4] & 0xF) == 0x8 && lazylefttime == 0){
+        lazylefttime = millis() + 3000;
+        //indicate_stop();
+        //indicate_left();
+
       }
     
       //Indicator right pressed
-      if((data[4] & 0xF) == 0x4 && lazyrighttime < millis()){
+      if((data[4] & 0xF) == 0x4 && lazyrighttime == 0){
         lazyrighttime = millis() + 3000;
-        //reset other indicator to prevent interference
-        lazylefttime = 0;
+        //indicate_stop();
+       // indicate_right();
       }
      }
      
@@ -436,13 +462,16 @@ class S60_02 : public Profile {
         this->updateDisplay(0x45,15);
         //Force video output to reverse cam
         digitalWrite(GPIO_NUM_27,LOW);
+        REVERSE_TIMEOUT = millis() + 5000;
       }else{
-        //Make sure display was not enabled by someone else
-        if(!keep_display_up){
-          this->updateDisplay(0x46,15);
-        }else{
-          //Switch back to Raspberry PI
-          digitalWrite(GPIO_NUM_27,HIGH);
+        //Make sure display was not enabled by someone else and timer has expired
+        if(millis() > REVERSE_TIMEOUT){
+          if(!keep_display_up){
+            this->updateDisplay(0x46,15);
+          }else{
+            //Switch back to Raspberry PI
+            digitalWrite(GPIO_NUM_27,HIGH);
+          }
         }
       }
      }
@@ -465,7 +494,10 @@ class S60_02 : public Profile {
     }
 
     void setupDone(){
-      //this->enablelcd();
-      //this->lcd("Volve~V1        luuk.cc",23);
+      this->print("Volve~V1        luuk.cc       ");
+      //gong_on();
+      //delay(500);
+      //gong_off();
+      
     }
 };
