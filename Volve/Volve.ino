@@ -1,4 +1,4 @@
-#include <ESP32CAN.h>
+  #include <ESP32CAN.h>
 #include <CAN_config.h>
 #include <HardwareSerial.h>
 #include "Classes.cpp"
@@ -39,10 +39,10 @@ void can_tx(int id, uint8_t d[8]){
     ESP32Can.CANWriteFrame(&tx_frame);
     //Needs delay between because DIM no hablo fast
     delay(50);
-    for (int i = 0; i < 8; i++) {
-        printf(",0x%02X", tx_frame.data.u8[i]);
-      }
-      printf("\n");
+   // for (int i = 0; i < 8; i++) {
+     //   printf(",0x%02X", tx_frame.data.u8[i]);
+      //}
+      //printf("\n");
 }
 
 Profile *profiles[] = {
@@ -61,7 +61,7 @@ void setup() {
   pinMode(GPIO_NUM_2, OUTPUT);
   digitalWrite(GPIO_NUM_2,HIGH);
   delay(2000);
-  Serial.begin(115200);
+  Serial.begin(9600);
   RTI.begin(2400);
   //SerialBT.enableSSP();
   //SerialBT.begin("Volve");
@@ -74,7 +74,7 @@ void setup() {
   // Init CAN Module
   ESP32Can.CANInit();
   
-  current_display_mode = 0x46;
+  current_display_mode = 0x45;
   //Turn on the PI
   pinMode(GPIO_NUM_23, OUTPUT);
   digitalWrite(GPIO_NUM_23,HIGH);
@@ -195,9 +195,11 @@ void rtiWrite() {
    if ((millis()-lastRtiMsg) > 200){
     if(part==0){
      RTI.write(current_display_mode);
+     //RTI.write(0x40);
     }
     if(part==1){
      RTI.write(brightness_levels[current_brightness_level]);
+     //RTI.write(0x2F);
     }
     if(part==2){ 
      RTI.write(0x83);

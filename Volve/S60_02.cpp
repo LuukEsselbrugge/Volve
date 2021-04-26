@@ -19,6 +19,11 @@ class S60_02 : public Profile {
   private: int REVERSE_TIMEOUT = 0;
 
   private: int keep_display_up = 0;
+  private: int old_ring_value = 0;
+  private: int current_ring_value = 0;
+  private: int LAST_DIM_UPDATE = 0;
+
+  private: int display_info = 0;
 
   private: int mediapressed = 0;
   private: int controlmedia = 0;
@@ -239,14 +244,12 @@ class S60_02 : public Profile {
         return "OK";
       }
 
-      if(key=="DISPLAY_UP"){
-        this->updateDisplay(0x45,15);
+      if(key.startsWith("DISPLAY_UP")){
+        this->updateDisplay(0x40,15);
         keep_display_up = 1;
-        //Switch video output to PI
-        digitalWrite(GPIO_NUM_27,HIGH);
         return "OK";
       }
-      if(key=="DISPLAY_DOWN"){
+      if(key.startsWith("DISPLAY_DOWN")){
         this->updateDisplay(0x46,15);
         keep_display_up = 0;
         return "OK";
@@ -307,31 +310,18 @@ class S60_02 : public Profile {
      }
 
      if(id == SWM_2){
-      //Transmit left indicator on for x amount
-      if(lazylefttime > millis() ){
-        //indicate_stop();
-        lazylefttime = 0;
-      }
-      //Transmit right indicator on for x amount
-      if(lazyrighttime > millis()){
-        //indicate_stop();
-        lazyrighttime = 0;
-      }
- 
-      //Indicator left pressed
-      if((data[4] & 0xF) == 0x8 && lazylefttime == 0){
-        lazylefttime = millis() + 3000;
-        //indicate_stop();
-        //indicate_left();
-
-      }
-    
-      //Indicator right pressed
-      if((data[4] & 0xF) == 0x4 && lazyrighttime == 0){
-        lazyrighttime = millis() + 3000;
-        //indicate_stop();
-       // indicate_right();
-      }
+       int rst_btn = (data[4] >> 4) & 0x0F;
+       current_ring_value = data[7];
+       if(current_ring_value != old_ring_value){
+         display_info = 0;
+       }
+       //reset pressed
+       if(rst_btn == 0xC && display_info == 0){
+          display_info = 1;
+          printf("press");
+          old_ring_value = data[7];
+          this->print("--- KM/H        ---- RPM      ");
+       }
      }
      
      if(id == REM){
@@ -381,7 +371,7 @@ class S60_02 : public Profile {
 
       //Vol up and cruise up pressed raise screen
       if(mediacontrols == 0x77 && cruisecontrols == 0x42){
-         this->updateDisplay(0x45,15);
+         this->updateDisplay(0x40,15);
          keep_display_up = 1;
       }
       //Vol down and cruise down pressed raise screen
@@ -460,17 +450,15 @@ class S60_02 : public Profile {
       //Serial.println(REVERSE);
       if(REVERSE){
         this->updateDisplay(0x45,15);
-        //Force video output to reverse cam
-        digitalWrite(GPIO_NUM_27,LOW);
-        REVERSE_TIMEOUT = millis() + 5000;
+        REVERSE_TIMEOUT = millis() + 10000;
       }else{
         //Make sure display was not enabled by someone else and timer has expired
         if(millis() > REVERSE_TIMEOUT){
           if(!keep_display_up){
             this->updateDisplay(0x46,15);
           }else{
-            //Switch back to Raspberry PI
-            digitalWrite(GPIO_NUM_27,HIGH);
+            //Switch back to Raspberry PI (VGA input)s
+            this->updateDisplay(0x40,15);
           }
         }
       }
@@ -480,6 +468,27 @@ class S60_02 : public Profile {
       int A = data[6];
       A &= 0b1111;
       RPM = A << 8 | data[7];
+     }
+
+     if(display_info && (millis() - LAST_DIM_UPDATE) > 250){
+      char spd[3];
+      if( ((SPEED/100)%10) == 0){
+        spd[0] = ' ';
+      }else{
+         spd[0] = '0'+(SPEED/100)%10;
+      }
+      spd[1] = '0'+(SPEED/10)%10;
+      spd[2] = '0'+(SPEED % 10);
+      updatelcd(spd,3,0);
+
+      char rpm[4];
+      rpm[0] = '0'+(RPM/1000);
+      rpm[1] = '0'+((RPM/100)%10);
+      rpm[2] = '0'+((RPM/10)%10);
+      rpm[3] = '0'+(RPM%10);
+      updatelcd(rpm,4,16);
+
+      LAST_DIM_UPDATE = millis();
      }
      
     }
