@@ -1,4 +1,4 @@
-  #include <ESP32CAN.h>
+#include <ESP32CAN.h>
 #include <CAN_config.h>
 #include <HardwareSerial.h>
 #include "Classes.cpp"
@@ -60,8 +60,8 @@ void setup() {
   WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0);
   pinMode(GPIO_NUM_2, OUTPUT);
   digitalWrite(GPIO_NUM_2,HIGH);
-  delay(2000);
-  Serial.begin(9600);
+  //delay(2000);
+  Serial.begin(4800);
   RTI.begin(2400);
   //SerialBT.enableSSP();
   //SerialBT.begin("Volve");
@@ -192,7 +192,7 @@ void updateDisplay(int m, int b){
 float lastRtiMsg = millis();
 int part = 0;
 void rtiWrite() {
-   if ((millis()-lastRtiMsg) > 200){
+   if ((millis()-lastRtiMsg) > 500){
     if(part==0){
      RTI.write(current_display_mode);
      //RTI.write(0x40);

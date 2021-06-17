@@ -26,6 +26,7 @@ class S60_02 : public Profile {
   private: int display_info = 0;
 
   private: int mediapressed = 0;
+  private: int rtipressed = 0;
   private: int controlmedia = 0;
   private: unsigned long pressedTime = 0;
   private: unsigned long releasedTime = 0;
@@ -365,9 +366,10 @@ class S60_02 : public Profile {
      if(id == SWM){
       int mediacontrols = data[7];
       int cruisecontrols = data[5];
+      int rticontrols = data[6];
       //Frame to tell radio phone is on spoof radio into no buttons pressed
-      uint8_t radio_overwrite[] = {0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0b000001};
-      uint8_t radio_normal[] = {0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0b000000};
+      //uint8_t radio_overwrite[] = {0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0b000001};
+      //uint8_t radio_normal[] = {0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0b000000};
 
       //Vol up and cruise up pressed raise screen
       if(mediacontrols == 0x77 && cruisecontrols == 0x42){
@@ -379,57 +381,104 @@ class S60_02 : public Profile {
          this->updateDisplay(0x46,15);
          keep_display_up = 0;
       }
-      
-      //Volume up and skip pressed same time
-      if(mediacontrols == 0x75){
-        lastmediacontrols = mediacontrols;
-        mediapressed = 1;
-        controlmedia = !controlmedia;
-        if(controlmedia){
-          can_tx(0x0220200E, radio_overwrite);
-        }else{
-          can_tx(0x0220200E, radio_normal);
-        }
+
+      if(rticontrols == 0x40){
+        rtipressed = 0;
       }
-      //Media button pressed
-      if(mediacontrols != 0x7F && mediapressed == 0 && controlmedia == 1){
-        pressedTime = millis();
-        mediapressed = 1;
-        lastmediacontrols = mediacontrols;
-      }
-      //All media buttons released
-      if(mediacontrols == 0x7F && mediapressed == 1 && controlmedia == 1){
+
+      if(mediacontrols == 0x7F){
         mediapressed = 0;
-        releasedTime = millis();
-        //Total button press time
-        long pressDuration = releasedTime - pressedTime;
+      }
 
-        if(pressDuration < SHORT_PRESS_TIME){
-          //Prev pressed
-          if(lastmediacontrols == 0x7E)
-            this->printBT("EVENT_LEFT\n");
-            
-          //Forward pressed
-          if(lastmediacontrols == 0x7D)
-            this->printBT("EVENT_RIGHT\n");
-
-          //Volume up pressed
-          if(lastmediacontrols == 0x77)
-            this->printBT("EVENT_ENTER\n");
-
-          //Volume down pressed
-          if(lastmediacontrols == 0x7B)
-            this->printBT("EVENT_BACK\n"); 
-        }else{
-          //Long forward pressed
-          if(lastmediacontrols == 0x7D)
-            this->printBT("EVENT_UP\n");
-
-          //Long prev pressed
-          if(lastmediacontrols == 0x7E)
-            this->printBT("EVENT_DOWN\n");
+      if(mediapressed == 0){
+        if(mediacontrols == 0x7D){
+          this->printBT("EVENT_NEXT\n");
+          mediapressed = 1;
+        }
+        if(mediacontrols == 0x7E){
+          this->printBT("EVENT_PREV\n");
+          mediapressed = 1;
         }
       }
+      
+      if(rtipressed == 0){
+        if(rticontrols == 0x48){
+          this->printBT("EVENT_UP\n");
+          rtipressed = 1;
+        }
+        if(rticontrols == 0x44){
+          this->printBT("EVENT_DOWN\n");
+          rtipressed = 1;
+        }
+        if(rticontrols == 0x42){
+          this->printBT("EVENT_LEFT\n");
+          rtipressed = 1;
+        }
+        if(rticontrols == 0x41){
+          this->printBT("EVENT_RIGHT\n");
+          rtipressed = 1;
+        }
+        if(rticontrols == 0x50){
+          this->printBT("EVENT_BACK\n");
+          rtipressed = 1;
+        }
+        if(rticontrols == 0x60){
+          this->printBT("EVENT_ENTER\n");
+          rtipressed = 1;
+        }
+      }
+      
+      
+//      //Volume up and skip pressed same time
+//      if(mediacontrols == 0x75){
+//        lastmediacontrols = mediacontrols;
+//        mediapressed = 1;
+//        controlmedia = !controlmedia;
+//        if(controlmedia){
+//          can_tx(0x0220200E, radio_overwrite);
+//        }else{
+//          can_tx(0x0220200E, radio_normal);
+//        }
+//      }
+      //Media button pressed
+//      if(mediacontrols != 0x7F && mediapressed == 0 && controlmedia == 1){
+//        pressedTime = millis();
+//        mediapressed = 1;
+//        lastmediacontrols = mediacontrols;
+//      }
+//      //All media buttons released
+//      if(mediacontrols == 0x7F && mediapressed == 1 && controlmedia == 1){
+//        mediapressed = 0;
+//        releasedTime = millis();
+//        //Total button press time
+//        long pressDuration = releasedTime - pressedTime;
+//
+//        if(pressDuration < SHORT_PRESS_TIME){
+//          //Prev pressed
+//          if(lastmediacontrols == 0x7E)
+//            this->printBT("EVENT_LEFT\n");
+//            
+//          //Forward pressed
+//          if(lastmediacontrols == 0x7D)
+//            this->printBT("EVENT_RIGHT\n");
+//
+//          //Volume up pressed
+//          if(lastmediacontrols == 0x77)
+//            this->printBT("EVENT_ENTER\n");
+//
+//          //Volume down pressed
+//          if(lastmediacontrols == 0x7B)
+//            this->printBT("EVENT_BACK\n"); 
+//        }else{
+//          //Long forward pressed
+//          if(lastmediacontrols == 0x7D)
+//            this->printBT("EVENT_UP\n");
+//
+//          //Long prev pressed
+//          if(lastmediacontrols == 0x7E)
+//            this->printBT("EVENT_DOWN\n");
+//        }
+//      }
      }
 
      if(id == CCM){
