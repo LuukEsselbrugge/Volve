@@ -18,7 +18,7 @@ const int rx_queue_size = 50;
 //Volvo RTI Display;
 const char brightness_levels[] = {0x20, 0x61, 0x62, 0x23, 0x64, 0x25, 0x26, 0x67, 0x68, 0x29, 0x2A, 0x2C, 0x6B, 0x6D, 0x6E, 0x2F};
 
-int current_display_mode = 0x46;
+int current_display_mode = 0x4C;
 char current_brightness_level = 15;
 
 //BluetoothSerial SerialBT;
@@ -74,6 +74,7 @@ void setup() {
   // Init CAN Module
   ESP32Can.CANInit();
   
+  current_display_mode = 0x45;
   //Turn on the PI
   pinMode(GPIO_NUM_23, OUTPUT);
   digitalWrite(GPIO_NUM_23,HIGH);
@@ -188,10 +189,10 @@ void updateDisplay(int m, int b){
   current_brightness_level = b;
 }
 
-unsigned long lastRtiMsg = millis();
+float lastRtiMsg = millis();
 int part = 0;
 void rtiWrite() {
-   if ((millis()-lastRtiMsg) > 250){
+   if ((millis()-lastRtiMsg) > 500){
     if(part==0){
      RTI.write(current_display_mode);
      //RTI.write(0x40);

@@ -9,9 +9,16 @@ class S60_02 : public Profile {
   const int SHORT_PRESS_TIME = 500;
 
   private: int BATTERY_VOLTAGE = 0;
-  private: int MILEAGE = 0;
-  private: int FUEL_LEVEL = 23;
-  private: int CABIN_TEMP = 3;
+  
+  private: long MILEAGE = 0;
+  private: int MILEAGE_AGE = 0;
+  
+  private: int FUEL_LEVEL = 0;
+  private: int FUEL_LEVEL_AGE = 0;
+
+  private: int LAST_DATA_REQUEST = 0;
+  
+  private: int CABIN_TEMP = 0;
   private: int SPEED = 0;
   private: int RPM = 0;
   private: int BRIGHTNESS = 0;
@@ -19,6 +26,8 @@ class S60_02 : public Profile {
   private: int REVERSE_TIMEOUT = 0;
 
   private: int keep_display_up = 0;
+  private: int manual_display_input = 0;
+  
   private: int old_ring_value = 0;
   private: int current_ring_value = 0;
   private: int LAST_DIM_UPDATE = 0;
@@ -36,6 +45,12 @@ class S60_02 : public Profile {
   private: int lockpressedamount = 0;
   private: unsigned long ulockpressedtime = 0;
   private: int ulockpressedamount = 0;
+
+  //Trip monitor
+  private: int trip_started = 0;
+  private: int trip_fuel_start = 0;
+  private: int trip_odo_start = 0;
+  private: long trip_time_start = 0;
 
   //Lazy indicators
   private: int lazylefttime = 0;
@@ -76,6 +91,7 @@ class S60_02 : public Profile {
         //Enables lcd but also disabled media buttons needs to be done once
         uint8_t d[] = {0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0b00000101};
         can_tx(0x0220200E, d);
+        delay(100);
         //LCD stays on but media buttons work again magic
         uint8_t d2[] = {0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0b00000000};
         can_tx(0x0220200E, d2);
@@ -95,7 +111,7 @@ class S60_02 : public Profile {
       
       void lcd(char input[], int len){
         char str[34] = {0};
-        std::fill_n(str, 34, 0x20);
+        std::fill_n(str, 32, 0x20);
         memcpy(str, input, len);
         int block = 0;
         for(int i = 0; i < 32; i+=6)
@@ -116,6 +132,7 @@ class S60_02 : public Profile {
                 }
               }
               block++;
+              delay(100);
          }
       }
       //Diag activations for CEM
@@ -168,9 +185,26 @@ class S60_02 : public Profile {
         uint8_t d[] = {0xCE, 0x48, 0xB0, 0x05, 0x00, 0x00, 0x00, 0x00};
         can_tx(0x0FFFFE, d);
       }
+
+      void request_mileage(){
+       
+          uint8_t d[] = {0xCC,0x51,0xA5,0x0C,0x01,0x00,0x00,0x00};
+          this->can_tx(0x0FFFFE, d);     
+
+        
+      }
+
+       void request_fuellevel(){
+      
+          uint8_t d[] = {0xCC,0x51,0xA5,0x01,0x01,0x00,0x00,0x00};
+          this->can_tx(0x0FFFFE, d);
+
+   
+        
+      }
       
       void disablelcd(){
-        uint8_t d[] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0b000100};
+        uint8_t d[] =  {0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0b000100};
         this->can_tx(0x0220200E, d);
       }
 
@@ -267,8 +301,7 @@ class S60_02 : public Profile {
         return String(BATTERY_VOLTAGE, DEC);
       }
       if(key=="MILEAGE"){
-        uint8_t d[] = {0xCD,0x40,0xA6,0x1A,0x11,0x01,0x00,0x00};
-        can_tx(0x0FFFFE, d);
+
         return String(MILEAGE, DEC);
       }
       if(key=="FUEL_LEVEL"){
@@ -282,46 +315,66 @@ class S60_02 : public Profile {
 
     //CAN data input
     void can_rx(int id, uint8_t* data){
-     // if(id == SWM_2 ){
-        // printf(",0x%02X", data[7]);
-       //  printf("\n");
-        //printf("0x%08X",id);
+//               printf("0x%08X",id);
 //        for (int i = 0; i < 8; i++) { 
 //          printf(",0x%02X", data[i]);
 //        }
-       // printf(",%lu",millis());
-        //printf("\n");  
-    //  }   
+//        printf(",%lu",millis());
+//        printf("\n");  
 
-     //Diag request responds
-     if(id == 0x00800003){
-         for (int i = 0; i < 8; i++) { 
-            printf(",0x%02X", data[i]);
-          }
-          printf(",%lu",millis());
-          printf("\n");   
-        //Battery voltage request responds 0x40 = CEM, 0x02 = battery request
+     //Diag request responds CEM
+     if(id == 0x00800003){   
+        //Battery voltage request responds
         if(data[1] == 0x40 && data[4] == 0x02){
           this->BATTERY_VOLTAGE = data[5] / 0.08;
+ 
         }
-        //Milage request responds 0x40 = CEM, 0x11 = mileage request
-        if(data[1] == 0x40 && data[4] == 0x11){
-          this->MILEAGE = (data[5]<<24) | (data[6]<<16)| (data[7]<<8);
+       
+       }
+
+     //Diag response DIM
+     if(id == 0x00800009){
+//         printf("0x%08X",id);
+//        for (int i = 0; i < 8; i++) { 
+//          printf(",0x%02X", data[i]);
+//        }
+//        printf(",%lu",millis());
+//        printf("\n");  
+        
+        //DIM fuel level response
+        if(data[1] == 0x51 && data[3] == 0x01){
+          int fuel = data[4] / 0.2;
+          if(fuel > 0){
+            this->FUEL_LEVEL = fuel;
+            this->FUEL_LEVEL_AGE = millis();
+            //this->printBT(String(fuel));
+          }
         }
+        //Odometer
+        if(data[1] == 0x51 && data[3] == 0x0C){
+          long mil = ((data[4]<<24) | (data[5]<<16)| (data[6]<<8)) / 256;
+          if(mil > 0){
+           this->MILEAGE = mil;
+            this->MILEAGE_AGE = millis();
+           // this->printBT(String(mil));
+          }
+        }
+        
      }
 
      if(id == SWM_2){
        int rst_btn = (data[4] >> 4) & 0x0F;
        current_ring_value = data[7];
-       if(current_ring_value != old_ring_value){
+       if(current_ring_value != old_ring_value && display_info == 1){
          display_info = 0;
+         this->disablelcd();
        }
        //reset pressed
-       if(rst_btn == 0xC && display_info == 0){
-          display_info = 1;
-          printf("press");
+       if(rst_btn == 0xC && this->display_info == 0){
+          this->display_info = 1;
+          //printf("press");
           old_ring_value = data[7];
-          this->print("--- KM/H        ---- RPM      ");
+          this->print("--- KM/H        ---- RPM       ");
        }
      }
      
@@ -372,14 +425,22 @@ class S60_02 : public Profile {
       //uint8_t radio_normal[] = {0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0b000000};
 
       //Vol up and cruise up pressed raise screen
-      if(mediacontrols == 0x77 && cruisecontrols == 0x42){
-         this->updateDisplay(0x40,15);
+      if(mediacontrols == 0x77 && cruisecontrols == 0x42 && mediapressed == 0){
          keep_display_up = 1;
+         mediapressed = 1;
+         if(manual_display_input == 0){
+          this->updateDisplay(0x40,15);
+          manual_display_input = 1;
+         }else{
+          this->updateDisplay(0x45,15);
+          manual_display_input = 0;
+        }
       }
-      //Vol down and cruise down pressed raise screen
-      if(mediacontrols == 0x7B && cruisecontrols == 0x44){
+      //Vol down and cruise down pressed lowers screen
+      if(mediacontrols == 0x7B && cruisecontrols == 0x44 && mediapressed == 0){
          this->updateDisplay(0x46,15);
          keep_display_up = 0;
+         mediapressed = 1;
       }
 
       if(rticontrols == 0x40){
@@ -393,10 +454,12 @@ class S60_02 : public Profile {
       if(mediapressed == 0){
         if(mediacontrols == 0x7D){
           this->printBT("EVENT_NEXT\n");
+          
           mediapressed = 1;
         }
         if(mediacontrols == 0x7E){
           this->printBT("EVENT_PREV\n");
+          
           mediapressed = 1;
         }
       }
@@ -502,13 +565,14 @@ class S60_02 : public Profile {
         REVERSE_TIMEOUT = millis() + 10000;
       }else{
         //Make sure display was not enabled by someone else and timer has expired
-        if(millis() > REVERSE_TIMEOUT){
+        if(millis() > REVERSE_TIMEOUT && REVERSE_TIMEOUT != -1){
           if(!keep_display_up){
             this->updateDisplay(0x46,15);
           }else{
             //Switch back to Raspberry PI (VGA input)s
             this->updateDisplay(0x40,15);
           }
+          REVERSE_TIMEOUT = -1;
         }
       }
      }
@@ -519,7 +583,9 @@ class S60_02 : public Profile {
       RPM = A << 8 | data[7];
      }
 
-     if(display_info && (millis() - LAST_DIM_UPDATE) > 250){
+
+   
+     if(display_info && (millis() - LAST_DIM_UPDATE) > 500){
       char spd[3];
       if( ((SPEED/100)%10) == 0){
         spd[0] = ' ';
@@ -528,20 +594,63 @@ class S60_02 : public Profile {
       }
       spd[1] = '0'+(SPEED/10)%10;
       spd[2] = '0'+(SPEED % 10);
-      updatelcd(spd,3,0);
+      this->updatelcd(spd,3,0);
 
       char rpm[4];
       rpm[0] = '0'+(RPM/1000);
       rpm[1] = '0'+((RPM/100)%10);
       rpm[2] = '0'+((RPM/10)%10);
       rpm[3] = '0'+(RPM%10);
-      updatelcd(rpm,4,16);
+      this->updatelcd(rpm,4,16);
 
       LAST_DIM_UPDATE = millis();
      }
-     
-    }
 
+//     //Car is running start new trip
+//     if(this->RPM > 0 && this->trip_started == 0){
+//          this->request_mileage();
+//          this->request_fuellevel();
+//
+//      
+//            this->trip_started = 1;
+//            this->trip_fuel_start = this->FUEL_LEVEL;
+//            this->trip_odo_start = this->MILEAGE;
+//            this->trip_time_start = millis();
+//
+//
+//     }
+//
+//     //Car stopped running stop trip and show data
+//     if(this->RPM == 0 && this->trip_started == 1){
+//   
+//      this->trip_started = 0;
+//      char text[31] = "--- KM    --.- L00:00:00      ";
+//      
+//      
+//      long total_distance = this->MILEAGE - this->trip_odo_start;
+//      int total_fuel = this->FUEL_LEVEL - this->trip_fuel_start;
+//     
+//      if( ((total_distance/100)%10) == 0){
+//        text[0] = ' ';
+//      }else{
+//         text[0] = '0'+(total_distance/100)%10;
+//      }
+//      text[1] = '0'+(total_distance/10)%10;
+//      text[2] = '0'+(total_distance % 10);
+//      
+//      if( ((total_fuel/100)%10) == 0){
+//        text[10] = ' ';
+//      }else{
+//         text[10] = '0'+(total_fuel/100)%10;
+//      }
+//      text[11] = '0'+(total_fuel/10)%10;
+//      text[13] = '0'+(total_fuel % 10);
+//
+//      this->print(text);
+//     
+//    }
+    }
+    
     String print(String value) {
       Serial.println(value);
       char copy[31];
@@ -552,10 +661,10 @@ class S60_02 : public Profile {
     }
 
     void setupDone(){
-     // this->print("Volve~V1        luuk.cc       ");
-      //gong_on();
-      //delay(500);
-      //gong_off();
+//      this->print("Volve~V1        luuk.cc       ");
+//      gong_on();
+//      //delay(100);
+//      gong_off();
       
     }
 };
