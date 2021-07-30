@@ -149,7 +149,7 @@ void loop(){
  
 }
 
-float lastCanRX = millis();
+unsigned long lastCanRX = millis();
 void can_RX(){
   CAN_frame_t rx_frame;
   // Receive next CAN frame from queue

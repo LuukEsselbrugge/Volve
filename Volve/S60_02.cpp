@@ -321,7 +321,7 @@ class S60_02 : public Profile {
           display_info = 1;
           printf("press");
           old_ring_value = data[7];
-          this->print("--- KM/H        ---- RPM      ");
+         // this->print("--- KM/H        ---- RPM      ");
        }
      }
      
